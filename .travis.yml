@@ -1,0 +1,5 @@
+language: go
+go: 1.10.x
+script:
+- go build ./topside -o topside.o
+- go build ./bottomside -o bottomside.o

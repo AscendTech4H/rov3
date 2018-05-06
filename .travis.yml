@@ -1,4 +1,4 @@
 language: go
 go: 1.10.x
 after_success:
-- for i in *.tar.gz; do curl --upload-file ./$i https://transfer.sh/$i; done
+- for i in *.tar.gz; do curl --upload-file ./$i https://transfer.sh/$i; echo; done

@@ -8,7 +8,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/huin/goserial"
+	"github.com/tarm/serial"
 )
 
 //Arduino is a linked arduino
@@ -23,7 +23,7 @@ type Arduino struct {
 //ConnectArduino connnects to an Arduino
 func ConnectArduino(port string) (*Arduino, error) {
 	//init bus
-	bus, err := goserial.OpenPort(&goserial.Config{
+	bus, err := serial.OpenPort(&serial.Config{
 		Name: port,
 		Baud: 115200,
 	})

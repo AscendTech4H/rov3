@@ -51,6 +51,10 @@ func (v Vec3) CosAng(v2 Vec3) float64 {
 	return v.DotP(v2) / (v.Magnitude() * v2.Magnitude())
 }
 
+func (v Vec3) Component(axis Vec3) float64 {
+	return axis.Unit().DotP(v)
+}
+
 var I = Vec3{1, 0, 0}
 var J = Vec3{0, 1, 0}
 var K = Vec3{0, 0, 1}

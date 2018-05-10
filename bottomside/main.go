@@ -104,9 +104,9 @@ func main() {
 			pcy := pidctrl.NewPIDController(1, 64, 4).SetOutputLimits(-1, 1).Set(0)
 			pcv := pidctrl.NewPIDController(1, 64, 4).SetOutputLimits(-1, 1)
 			mpur := ard.procMPU() //set up MPU
-			acv := Vec3{mpur.AcX, mpur.AcY, mpur.AcZ}.Unit()
-			θx := math.Asin(acv.Y()) //these axes are right - look at a diagram
-			θy := math.Asin(acv.X())
+			acv := Vec3{mpur.AcX, mpur.AcY, mpur.AcZ}
+			θx := math.Atan(acv.Z() / acv.Y())
+			θy := math.Asin(acv.Z() / acv.X())
 			g := acv.Magnitude() //gravity
 			pcv.Set(g)           //set vertical target to gravity
 			ttx := 0.0           //x tilt target
@@ -116,7 +116,7 @@ func main() {
 				//read accelerometer
 				mpur = ard.procMPU()
 				acv = Vec3{mpur.AcX, mpur.AcY, mpur.AcZ}.Unit()
-				aθx, aθy := math.Asin(acv.Y()), math.Asin(acv.X())
+				aθx, aθy := math.Atan(acv.Z()/acv.Y()), math.Asin(acv.Z()/acv.X())
 				ΔθxΔt, ΔθyΔt := mpur.GyX, mpur.GyY
 				Δt := mpur.DT.Seconds()
 				//use Euler's method
@@ -128,15 +128,15 @@ func main() {
 				θx = θx*0.998 + aθx*0.02
 				θy = θy*0.998 + aθy*0.02
 				//generate axis unit vectors
-				xaxis := Vec3{math.Cos(θy), 0, math.Sin(θy)}
-				yaxis := Vec3{0, math.Cos(θx), math.Sin(θx)}
+				xaxis := Vec3{math.Sin(θy), 0, math.Cos(θy)}
+				yaxis := Vec3{0, math.Sin(θx), math.Cos(θx)}
 				zaxis := yaxis.CrossP(xaxis).Unit()
 				//rotate accleration vector
-				realacv := mat3{
-					{I.CosAng(xaxis), I.CosAng(yaxis), I.CosAng(zaxis)},
-					{J.CosAng(xaxis), J.CosAng(yaxis), J.CosAng(zaxis)},
-					{K.CosAng(xaxis), K.CosAng(yaxis), K.CosAng(zaxis)},
-				}.multiplyVec(acv)
+				realacv := Vec3{
+					acv.Component(xaxis),
+					acv.Component(yaxis),
+					acv.Component(zaxis),
+				}
 				//fetch targets
 				botstate.Lock()
 				tiltx := botstate.TiltX

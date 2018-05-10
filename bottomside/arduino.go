@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -13,11 +12,11 @@ import (
 
 //Arduino is a linked arduino
 type Arduino struct {
-	serout *bufio.Reader
-	serin  *bufio.Writer
-	PrevT  uint32
-	dcache map[uint8]bool
-	acache map[uint8]uint8
+	serout     *bufio.Reader
+	serin      *bufio.Writer
+	PrevT      uint32
+	motcache   map[uint8]int
+	servocache map[uint8]uint8
 }
 
 //ConnectArduino connnects to an Arduino
@@ -53,27 +52,12 @@ func ConnectArduino(port string) (*Arduino, error) {
 	return a, nil
 }
 
-//send arguments and recieve output
-func (a *Arduino) exCmd(in []byte, nout uint8) ([]byte, error) {
-	_, err := a.serin.Write(in)
+func (a *Arduino) flush() *Arduino {
+	err := a.serin.Flush()
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	if nout == 0 { //if there is no return value
-		return nil, nil
-	}
-	out := make([]byte, nout)
-	o := out
-reread:
-	n, err := a.serout.Read(out)
-	if err != nil {
-		return nil, err
-	}
-	if n < len(o) {
-		o = o[n:]   //shift over
-		goto reread //keep reading
-	}
-	return out, nil
+	return a
 }
 
 //MPUReading is a struct returned by an MPU read
@@ -86,18 +70,21 @@ type MPUReading struct {
 
 //call procMPU on the arduino
 func (a *Arduino) procMPU() MPUReading {
-	dat, err := a.exCmd([]byte{1 /*procMPU*/}, 18)
+	//send cmd
+	_, err := fmt.Fprintln(a.serin, "3")
 	if err != nil {
 		panic(err)
 	}
+	//flush
+	a.flush()
+	//decode big edian
 	var mpudat struct {
 		AcX, AcY, AcZ int16
 		Temp          int16
 		GyX, GyY, GyZ int16
 		T             uint32
 	}
-	//decode big edian
-	err = binary.Read(bytes.NewReader(dat), binary.BigEndian, &mpudat)
+	err = binary.Read(a.serout, binary.BigEndian, &mpudat)
 	if err != nil {
 		panic(err)
 	}
@@ -117,110 +104,69 @@ func (a *Arduino) procMPU() MPUReading {
 	}
 }
 
-func b2b(v bool) uint8 {
-	switch v {
-	case false:
-		return 0
-	case true:
-		return 1
+// setMotor sets a motor speed. speed must be in [-1, 1]
+func (a *Arduino) setMotor(motnum uint8, speed float64) *Arduino {
+	val := int(speed * 255)
+	if val > 255 {
+		val = 255
+	} else if val < -255 {
+		val = -255
 	}
-	return 65 //because the go compiler is weird
-}
-
-//call digWrite on the Arduino
-func (a *Arduino) digWrite(pin uint8, val bool) *Arduino {
-	if a.dcache[pin] == val {
-		return a
+	oldval, cached := a.motcache[motnum]
+	if !cached || val != oldval {
+		_, err := fmt.Fprintf(a.serin, "1 %d %d\n", motnum, val)
+		if err != nil {
+			panic(err)
+		}
 	}
-	_, err := a.exCmd([]byte{2, pin, b2b(val)}, 0)
-	if err != nil {
-		panic(err)
-	}
-	a.dcache[pin] = val
+	a.motcache[motnum] = val
 	return a
 }
 
-//call anaWrite on the Arduino
-func (a *Arduino) anaWrite(pin uint8, val uint8) *Arduino {
-	if a.acache[pin] == val {
-		return a
+// setServo sets a servo position; pos must be in degrees in [0, 180]
+func (a *Arduino) setServo(servonum uint8, pos uint8) *Arduino {
+	if pos > 180 {
+		pos = 180
 	}
-	_, err := a.exCmd([]byte{3, pin, val}, 0)
-	if err != nil {
-		panic(err)
+	oldval, cached := a.servocache[servonum]
+	if !cached || pos != oldval {
+		_, err := fmt.Fprintf(a.serin, "2 %d %d\n", servonum, pos)
+		if err != nil {
+			panic(err)
+		}
 	}
-	a.acache[pin] = val
-	return a
-}
-
-//call pinOut on the Arduino
-func (a *Arduino) pinOut(pin uint8) *Arduino {
-	_, err := a.exCmd([]byte{4, pin}, 0)
-	if err != nil {
-		panic(err)
-	}
-	return a
-}
-
-func (a *Arduino) mot(enable uint8, clockwise uint8, counterclockwise uint8, pwm uint8) Motor {
-	a.pinOut(enable)
-	a.pinOut(clockwise)
-	a.pinOut(counterclockwise)
-	a.pinOut(pwm)
-	m := Motor{
-		Ard:    a,
-		Enable: enable,
-		CW:     clockwise,
-		CCW:    counterclockwise,
-		PWM:    pwm,
-	}
-	m.set(0)
-	return m
-}
-
-func (a *Arduino) freq(pin uint8, freq uint16) *Arduino {
-	err := binary.Write(a.serin, binary.BigEndian, struct {
-		cmd  uint8
-		pin  uint8
-		freq uint16
-	}{
-		cmd:  5,
-		pin:  pin,
-		freq: freq,
-	})
-	if err != nil {
-		panic(err)
-	}
-	return a
-}
-
-func (a *Arduino) flush() *Arduino {
-	err := a.serin.Flush()
-	if err != nil {
-		panic(err)
-	}
+	a.servocache[servonum] = pos
 	return a
 }
 
 type Motor struct {
-	Ard     *Arduino
-	Enable  uint8
-	CW, CCW uint8
-	PWM     uint8
+	num uint8
+	a   *Arduino
 }
 
-func (m Motor) set(spd int16) {
-	if spd > 255 {
-		spd = 255
-	} else if spd < -255 {
-		spd = -255
+func (a *Arduino) mot(motnum uint8) Motor {
+	return Motor{
+		num: motnum,
+		a:   a,
 	}
-	mag := spd
-	if spd < 0 {
-		mag *= -1
+}
+
+func (m *Motor) set(speed float64) {
+	m.a.setMotor(m.num, speed)
+}
+
+type Servo struct {
+	num uint8
+	a   *Arduino
+}
+
+func (a *Arduino) servo(servonum uint8) Servo {
+	return Servo{
+		num: servonum,
+		a:   a,
 	}
-	m.Ard.digWrite(m.Enable, spd != 0)
-	m.Ard.digWrite(m.CW, spd > 0)
-	m.Ard.digWrite(m.CCW, spd < 0)
-	m.Ard.anaWrite(m.PWM, uint8(mag))
+}
+
+func (m *Servo) set(pos uint8) {
+	m.a.setServo(m.num, pos)
 }

@@ -9,9 +9,9 @@ type BotState struct {
 	Turn           float64 //between -1 and 1
 	Vertical       float64 //in m/s^2
 	TiltX, TiltY   float64 //in radians
-	ClawOpen       bool    //is the claw supposed to be open
+	ClawOpen       uint8   //is the claw supposed to be open
 	ClawVert       uint8   //claw vertical tilt
-	ClawHorizontal int16   //claw horizontal tilt
+	ClawHorizontal float64 //claw horizontal tilt
 	UpdateCount    uint64  //number of times the motors have beeen updated
 	Light          bool
 	OBSSound       bool

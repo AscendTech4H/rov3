@@ -9,7 +9,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"time"
 
+	"github.com/gorilla/websocket"
+	"github.com/jadr2ddude/ds4"
 	"github.com/urfave/cli"
 )
 
@@ -64,12 +67,13 @@ func main() {
 			rp.ServeHTTP(w, r)
 		})
 		//handle dualshock
-		/*go func() { //search for devices in the background
+		go func() { //search for devices in the background
 			//initial state
 			var bs BotState
 			//HUD state
 			var hs struct {
 				ClawLocked bool `json:"clawlocked"`
+				ClawOpen   int  `json:"clawopen"`
 			}
 			//connect to control system
 			ws, _, err := websocket.DefaultDialer.Dial(
@@ -107,14 +111,8 @@ func main() {
 				//Top right buttons not used
 				//Playstation button not used
 				//Share/Option buttons not used
-				X: ds4.ButtonPRChannel{
-					Push: make(chan struct{}), //open claw
-					//release unused
-				},
-				Circle: ds4.ButtonPRChannel{
-					Push: make(chan struct{}), //close claw
-					//release unused
-				},
+				X:      make(ds4.ButtonChannel), //open claw
+				Circle: make(ds4.ButtonChannel), //close claw
 				PSButton: ds4.ButtonPRChannel{
 					Push: make(chan struct{}), //light toggle
 					//release unused
@@ -124,9 +122,10 @@ func main() {
 				R2:       make(chan float64),      //moving down
 			}
 			_, _, _ = bs, hs, c
-			go func() { //set up controllers
+			go func() { //TODO: set up controllers
 			}()
 			tick := time.NewTicker(time.Second / 25)
+			tick2 := time.NewTicker(time.Second / 100)
 			hs.ClawLocked = true //lock claw by default
 			for {
 				select {
@@ -135,6 +134,14 @@ func main() {
 					if err != nil {
 						log.Fatalf("Failed to send botstate: %q\n", err.Error())
 					}
+				case <-tick2.C: //update claw servo angle
+					co := int(bs.ClawOpen) + hs.ClawOpen
+					if co > 180 {
+						co = 180
+					} else if co < 0 {
+						co = 0
+					}
+					bs.ClawOpen = uint8(co)
 				case v := <-c.Joysticks.Left.X:
 					bs.Turn = v
 				case v := <-c.Joysticks.Left.Y:
@@ -143,7 +150,7 @@ func main() {
 					if hs.ClawLocked {
 						continue
 					}
-					bs.ClawHorizontal = int16(mapVal(v, -1, 1, -255, 255))
+					bs.ClawHorizontal = v
 				case v := <-c.Joysticks.Right.Y:
 					if hs.ClawLocked {
 						continue
@@ -163,17 +170,25 @@ func main() {
 					bs.Vertical = v * maxvert
 				case v := <-c.R2:
 					bs.Vertical = -v * maxvert
-				case <-c.X.(ds4.ButtonPRChannel).Push:
-					bs.ClawOpen = false
-				case <-c.Circle.(ds4.ButtonPRChannel).Push:
-					bs.ClawOpen = true
+				case v := <-c.X.(ds4.ButtonChannel):
+					if v {
+						hs.ClawOpen = 1
+					} else {
+						hs.ClawOpen = 0
+					}
+				case v := <-c.Circle.(ds4.ButtonChannel):
+					if v {
+						hs.ClawOpen = -1
+					} else {
+						hs.ClawOpen = 0
+					}
 				case <-c.PSButton.(ds4.ButtonPRChannel).Push:
 					bs.Light = !bs.Light
 				case v := <-c.PSButton.(ds4.ButtonChannel):
 					bs.OBSSound = v
 				}
 			}
-		}()*/
+		}()
 		//http.Handle("/", r)
 		log.Fatalf("Failed to serve: %q\n", http.ListenAndServe(":8001", nil).Error())
 		return nil
@@ -181,15 +196,16 @@ func main() {
 	app.Run(os.Args)
 }
 
-//BotState is the state of the controls
+//BotState is the state of the robot
 type BotState struct {
 	Forward        float64 //between -1 and 1
 	Turn           float64 //between -1 and 1
 	Vertical       float64 //in m/s^2
 	TiltX, TiltY   float64 //in radians
-	ClawOpen       bool    //is the claw supposed to be open
+	ClawOpen       uint8   //is the claw supposed to be open
 	ClawVert       uint8   //claw vertical tilt
-	ClawHorizontal int16   //claw horizontal tilt
+	ClawHorizontal float64 //claw horizontal tilt
+	UpdateCount    uint64  //number of times the motors have beeen updated
 	Light          bool
 	OBSSound       bool
 }

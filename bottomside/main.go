@@ -84,27 +84,21 @@ func main() {
 		}
 		var botstate BotState
 		var mots = struct {
-			va, vb, vc, vd Motor //Vertical motors
-			hl, hr         Motor //Horizontal motors
-			clawrot        Motor //claw rotation motor
+			va, vb, vc, vd     Motor //Vertical motors
+			hl, hr             Motor //Horizontal motors
+			clawrot            Motor //claw rotation motor
+			clawgrip, clawtilt Servo //claw servos
 		}{
-			ard.mot(26, 22, 25, 2),
-			ard.mot(27, 23, 24, 3),
-			ard.mot(32, 28, 31, 4),
-			ard.mot(33, 29, 30, 5),
-			ard.mot(38, 34, 37, 6),
-			ard.mot(39, 35, 36, 7),
-			ard.mot(65, 65, 65, 65),
+			ard.mot(0),
+			ard.mot(1),
+			ard.mot(2),
+			ard.mot(3),
+			ard.mot(4),
+			ard.mot(5),
+			ard.mot(6),
+			ard.servo(0),
+			ard.servo(1),
 		}
-		var clawopenpin uint8 = 65 //TODO: change
-		var clawvertpin uint8 = 65 //TODO: change
-		var lightpin uint8 = 65    //TODO: change
-		var obsoundpin uint8 = 65  //TODO: change
-		ard.
-			pinOut(clawopenpin).
-			pinOut(clawvertpin).
-			pinOut(lightpin).
-			pinOut(obsoundpin)
 		go func() { //run arduino processing in background
 			pcx := pidctrl.NewPIDController(1, 64, 4).SetOutputLimits(-1, 1).Set(0)
 			pcy := pidctrl.NewPIDController(1, 64, 4).SetOutputLimits(-1, 1).Set(0)
@@ -188,23 +182,21 @@ func main() {
 				hl = mapVal(hl, -1, 1, -255, 255)
 				hr = mapVal(hr, -1, 1, -255, 255)
 				//write to motors
-				mots.va.set(int16(va))
-				mots.vb.set(int16(vb))
-				mots.vc.set(int16(vc))
-				mots.vd.set(int16(vd))
-				mots.hl.set(int16(hl))
-				mots.hr.set(int16(hr))
+				mots.va.set(va)
+				mots.vb.set(vb)
+				mots.vc.set(vc)
+				mots.vd.set(vd)
+				mots.hl.set(hl)
+				mots.hr.set(hr)
 				//do claw stuff
 				mots.clawrot.set(clawh)
-				ard.digWrite(clawopenpin, clawopen)
-				ard.anaWrite(clawvertpin, clawv)
-				//other
-				ard.digWrite(lightpin, ls)
-				if obs {
-					ard.freq(obsoundpin, 6000)
-				} else {
-					ard.freq(obsoundpin, 0)
-				}
+				mots.clawgrip.set(clawopen)
+				mots.clawtilt.set(clawv)
+				mots.clawrot.set(clawh)
+				//TODO: light/OBS
+				_ = ls
+				_ = obs
+				//flush commands
 				ard.flush()
 			}
 		}()

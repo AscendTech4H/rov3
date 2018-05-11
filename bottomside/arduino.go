@@ -53,6 +53,7 @@ func ConnectArduino(port string) (*Arduino, error) {
 }
 
 func (a *Arduino) flush() *Arduino {
+	a.serin.WriteString("4\n")
 	err := a.serin.Flush()
 	if err != nil {
 		panic(err)

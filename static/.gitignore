@@ -1,2 +1,5 @@
 materialize.min.js
-materialize.min.css
+*.css
+*.ttf
+*.woff
+*.woff2

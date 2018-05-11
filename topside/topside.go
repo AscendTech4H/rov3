@@ -155,7 +155,7 @@ func main() {
 					if hs.ClawLocked {
 						continue
 					}
-					bs.ClawVert = uint8(mapVal(v, -1, 1, 0, 255))
+					bs.ClawVert = uint8(mapVal(v, -1, 1, 0, 180))
 				case lck := <-c.Joysticks.Right.Btn.(ds4.ButtonChannel):
 					hs.ClawLocked = !lck
 				case tr := <-c.Touchpad.Touches:

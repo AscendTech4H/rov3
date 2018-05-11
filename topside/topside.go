@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -88,6 +89,8 @@ func main() {
 				log.Fatalf("Failed to connect to control system: %q\n", err.Error())
 			}
 			defer ws.Close()
+			cslck := new(sync.Mutex)
+			csch := make(chan struct{})
 			c := &ds4.Controller{
 				NoClose: true, //re-use
 				Joysticks: struct {
@@ -122,13 +125,35 @@ func main() {
 				R2:       make(chan float64),      //moving down
 			}
 			_, _, _ = bs, hs, c
-			go func() { //TODO: set up controllers
+			go func() { //search for dualshock devices
+				for {
+					time.Sleep(time.Second)
+					evd, err := ds4.SearchEvdev()
+					if err != nil {
+						log.Printf("Evdev search failed: %q\n", err.Error())
+					}
+					if len(evd) == 0 {
+						continue
+					}
+					for _, v := range evd {
+						cslck.Lock()
+						csch <- struct{}{}
+						cslck.Lock()
+						c.Dev = v
+						cslck.Unlock()
+						csch <- struct{}{}
+						c.Run()
+					}
+				}
 			}()
 			tick := time.NewTicker(time.Second / 25)
 			tick2 := time.NewTicker(time.Second / 100)
 			hs.ClawLocked = true //lock claw by default
 			for {
 				select {
+				case <-csch: //handle device swap
+					cslck.Unlock() //let the swapper go
+					<-csch         //wait for swap to finish
 				case <-tick.C: //send BotState update
 					err := ws.WriteJSON(bs)
 					if err != nil {

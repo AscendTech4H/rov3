@@ -1,45 +1,14 @@
 #include <Servo.h>
 #include <Wire.h>
-
-struct motor {
-  int cwpin;
-  int ccwpin;
-  int enablepin;
-  int pwmpin;
-  bool isweird;
-};
-
-void setMotor(struct motor mot, int val) {
-	digitalWrite(mot.enablepin, val != 0);
-	if(mot.isweird) {
-		analogWrite(mot.cwpin, (val > 0) ? val : 0);
-		analogWrite(mot.cwpin, (val < 0) ? -val : 0);
-	} else {
-		digitalWrite(mot.cwpin, val > 0);
-		digitalWrite(mot.ccwpin, val < 0);
-		analogWrite(mot.pwmpin, abs(val));
-  	}
-}
+#include <Tlc5940.h>
+#include <tlc_animations.h>
+#include <tlc_config.h>
+#include <tlc_fades.h>
+#include <tlc_progmem_utils.h>
+#include <tlc_servos.h>
+#include <tlc_shifts.h>
 
 #define modeOut(p) pinMode(p, OUTPUT)
-
-void setupMotor(struct motor mot) {
-  	modeOut(mot.cwpin);
-  	modeOut(mot.ccwpin);
-  	modeOut(mot.enablepin);
-  	if(mot.isweird) modeOut(mot.pwmpin);
-}
-
-const struct motor motors[] = {
-	{24, A8, 38, 45},
-	{49, 26, 34, 5},
-	{25, 29, 40, 4},
-	{27, 43, 41, 3},
-	{12, 44, 47, -1, true},
-	{44, 11, 50, -1, true},
-	{6, 7, 14, -1, true}
-};
-const int nmotors = sizeof(motors)/sizeof(struct motor);
 
 const int servopins[] = {/*todo*/};
 const int nservos = sizeof(servopins)/sizeof(int);
@@ -50,14 +19,13 @@ Servo servos[nservos];
 void setup() {
 	//start serial at 115200
 	Serial.begin(115200);
-	//initialize motors
-	for(int i = 0; i < nmotors; i++) {
-		setupMotor(motors[i]);
-	}
 	//attatch servos
 	for(int i = 0; i < nservos; i++) {
 		servos[i].attach(servopins[i]);
 	}
+    //TLC5940 setup
+    Tlc.init(0);
+    Tlc.update();
 	//mpu setup
 	Wire.begin();
 	Wire.beginTransmission(MPU_addr);
@@ -70,17 +38,21 @@ void setup() {
 	Serial.println("started");
 }
 
-int serRead() {
+long serRead() {
 	while(Serial.available()<1);
 	return Serial.parseInt();
 }
 
 void cmdMotor() {
-	setMotor(motors[serRead()], serRead());
+	Tlc.set(serRead(), serRead());
 }
 
 void cmdServo() {
 	servos[serRead()].write(serRead());
+}
+
+void cmdUpdate() {
+    Tlc.update();
 }
 
 //used to convert a value to big edian
@@ -115,6 +87,9 @@ void loop() {
 	case 3:
 		cmdMPU();
 		break;
+    case 4:
+        cmdUpdate();
+        break;
 	default:
 		Serial.println("bad command");
 	}

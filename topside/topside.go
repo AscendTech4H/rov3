@@ -184,8 +184,8 @@ func main() {
 					}
 				case <-c.PSButton.(ds4.ButtonPRChannel).Push:
 					bs.Light = !bs.Light
-				case v := <-c.PSButton.(ds4.ButtonChannel):
-					bs.OBSSound = v
+					/*case v := <-c.PSButton.(ds4.ButtonChannel):
+					bs.OBSSound = v*/
 				}
 			}
 		}()

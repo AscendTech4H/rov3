@@ -44,7 +44,10 @@ long serRead() {
 }
 
 void cmdMotor() {
-	Tlc.set(serRead(), serRead());
+	int mot = serRead();
+	int val = serRead();
+	Tlc.set(mot*2, (val > 0) ? val : 0);
+	Tlc.set(mot*2 + 1, (val < 0) ? -val : 0);
 }
 
 void cmdServo() {

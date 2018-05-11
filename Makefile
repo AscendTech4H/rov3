@@ -7,13 +7,13 @@ GPTH = github.com/jadr2ddude/rov3
 GOPATH = $(shell pwd)/gopath
 GB = gb
 $(GBUILDPATH):
-	mkdir -p $@
+	if [ ! -d $@ ]; then mkdir -p $@; fi
 $(GBUILDPATH)/bottomside $(GBUILDPATH)/topside: $(GBUILDPATH)
-	mkdir $@
+	if [ ! -d $@ ]; then mkdir $@; fi
 $(GBUILDPATH)/bottomside/%.go: bottomside/%.go $(GBUILDPATH)/bottomside
-	cp $< $@
+	cp -f $< $@
 $(GBUILDPATH)/topside/topside.go: topside/topside.go $(GBUILDPATH)/topside
-	cp $< $@
+	cp -f $< $@
 .PHONY: gb
 gb: $(foreach v,$(shell echo bottomside/*.go),$(GBUILDPATH)/$(v)) $(GBUILDPATH)/topside/topside.go
 clean-gpath:
